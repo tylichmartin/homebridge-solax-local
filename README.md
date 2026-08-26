@@ -1,44 +1,44 @@
 # homebridge-solax-local
 
-Homebridge plugin pro střídače **Solax** přes **lokální API donglu** (Pocket WiFi 3.0 / LAN dongle) — žádný cloud, žádné TokenID, žádný starý GET. Ověřeno na **X3-Hybrid-G4 / G4 PRO**; architektura je připravená na další modely (`model` v konfiguraci).
+Homebridge plugin for **Solax** inverters using the **local dongle API** (Pocket WiFi 3.0 / LAN dongle) — no cloud, no TokenID, no legacy GET. Verified on **X3-Hybrid-G4 / G4 PRO**; the architecture is ready for more models via the `model` config option.
 
-## Jak to funguje
+## How it works
 
-Plugin každých pár sekund pošle na dongle:
+Every few seconds the plugin sends this to the dongle:
 
 ```
-POST http://<IP-donglu>/
+POST http://<dongle-ip>/
 Content-Type: application/x-www-form-urlencoded
 X-Forwarded-For: 5.8.8.8
 
-optType=ReadRealTimeData&pwd=<SN-donglu>
+optType=ReadRealTimeData&pwd=<dongle-SN>
 ```
 
-Dongle vrátí JSON s polem `Data[]`, které plugin dekóduje (dekodér podle zvoleného `model`).
+The dongle replies with JSON containing a `Data[]` array, which the plugin decodes (decoder selected by `model`).
 
-## Předpoklady
+## Requirements
 
-1. Dongle je **připojený k domácí Wi-Fi/LAN** (ne jen v AP režimu) a má IP na LAN. Dej mu v routeru **DHCP rezervaci** (pevnou IP).
-2. **Lokální API je povolené** (novější firmware ho někdy blokuje — pak probe.js spadne na timeout).
-3. `sn` = sériové číslo **Wi-Fi/LAN donglu** (nálepka, např. `SWxxxxxxxx`), ne SN střídače.
+1. The dongle is **connected to your home Wi-Fi/LAN** (not just AP mode) and has a LAN IP. Give it a **DHCP reservation** (static IP) in your router.
+2. **Local API is enabled.** Newer firmware sometimes blocks it — in that case `probe.js` will time out.
+3. `sn` = the serial number of the **Wi-Fi/LAN dongle** (on its sticker, e.g. `SWxxxxxxxx`), *not* the inverter serial.
 
-## Nejdřív otestuj (bez instalace)
+## Test first (before installing)
 
 ```bash
 node probe.js 192.168.1.50 SWXXXXXXXX
 ```
 
-Když uvidíš rozumné hodnoty (PV, SOC, Load…), API funguje. Když ne, pošli celý výpis `Data[]` — doladíme indexy / přidáme dekodér.
+If you see sensible values (PV, SOC, Load…), the API works. If not, open an issue with the full `Data[]` output so the indices / decoder can be adjusted.
 
-## Instalace
+## Installation
 
-Přes Homebridge Config UI X (po zveřejnění na npm), nebo lokálně:
+Via Homebridge Config UI X (once published to npm), or locally:
 
 ```bash
 npm install -g homebridge-solax-local
 ```
 
-## Konfigurace (config.json)
+## Configuration (config.json)
 
 ```json
 {
@@ -58,42 +58,42 @@ npm install -g homebridge-solax-local
 }
 ```
 
-## Co uvidíš v HomeKit
+## What you get in HomeKit
 
-Apple Home nemá nativní „výkon ve W", takže výkonové hodnoty jsou vystavené jako **světelné senzory** (hodnota v „lux" = watty) — díky tomu jsou vidět nativně v Domácnosti. V appce **Eve** se navíc zobrazí jako skutečné Watty (custom charakteristika).
+Apple Home has no native "power in W" characteristic, so power values are exposed as **light sensors** (the "lux" value = watts) — this makes them visible natively in the Home app. In the **Eve** app they additionally show up as real Watts (a custom characteristic).
 
-| Accessory | Zdroj (Data) | Poznámka |
+| Accessory | Source (Data) | Notes |
 |---|---|---|
-| FVE výroba | PV1+PV2 (14+15) | vždy ≥ 0 |
-| Zátěž domu | Load (47) | spotřeba domu |
-| Odběr ze sítě | Grid (34-35), záporná část | import |
-| Dodávka do sítě | Grid (34-35), kladná část | export |
-| Baterie nabíjení | Battery (41), kladná část | |
-| Baterie vybíjení | Battery (41), záporná část | |
-| Solax Baterie | SOC (103) | nativní baterie %, stav nabíjení |
+| Solar PV Power | PV1+PV2 (14+15) | always ≥ 0 |
+| House Load | Load (47) | house consumption |
+| Grid Import | Grid (34-35), negative part | import from grid |
+| Grid Export | Grid (34-35), positive part | export to grid |
+| Battery Charge | Battery (41), positive part | |
+| Battery Discharge | Battery (41), negative part | |
+| Solax Battery | SOC (103) | native battery %, charging state |
 
-Prohozené znaménko? Přepni `invertGrid` / `invertBattery`.
+Signs swapped? Toggle `invertGrid` / `invertBattery`.
 
-## Přidání dalšího modelu
+## Adding another model
 
-V `index.js` je mapa `DECODERS`. Přidej funkci `decodeXxx(data)` vracející stejná pole (`pvPower`, `gridPower`, `batteryPower`, `loadPower`, `soc`, `yieldToday`, `yieldTotal`, …) a zaregistruj ji v `DECODERS` pod klíčem modelu. Zbytek pluginu je generický.
+`index.js` has a `DECODERS` map. Add a `decodeXxx(data)` function that returns the same fields (`pvPower`, `gridPower`, `batteryPower`, `loadPower`, `soc`, `yieldToday`, `yieldTotal`, …) and register it in `DECODERS` under the model key. The rest of the plugin is generic.
 
-## Mapování dat (X3 Hybrid G4)
+## Data mapping (X3 Hybrid G4)
 
-| Index | Význam | Úprava |
+| Index | Meaning | Conversion |
 |---|---|---|
-| 6,7,8 | AC výkon fáze 1-3 | signed |
-| 14,15 | PV1 / PV2 výkon (W) | — |
-| 34-35 | Výkon do/ze sítě (W) | signed32, low-word first |
-| 41 | Výkon baterie (W) | signed16 |
-| 47 | Zátěž domu (W) | signed16 |
-| 68-69 | Celková výroba (kWh) | signed32 ÷10 |
-| 70 | Dnešní výroba (kWh) | ÷10 |
-| 103 | SOC baterie (%) | — |
-| 105 | Teplota baterie (°C) | signed16 |
+| 6,7,8 | AC power phase 1-3 | signed |
+| 14,15 | PV1 / PV2 power (W) | — |
+| 34-35 | Grid power to/from grid (W) | signed32, low word first |
+| 41 | Battery power (W) | signed16 |
+| 47 | House load (W) | signed16 |
+| 68-69 | Total yield (kWh) | signed32 ÷10 |
+| 70 | Today's yield (kWh) | ÷10 |
+| 103 | Battery SOC (%) | — |
+| 105 | Battery temperature (°C) | signed16 |
 
-Zdroj mapování: referenční knihovna [squishykid/solax](https://github.com/squishykid/solax).
+Mapping source: reference library [squishykid/solax](https://github.com/squishykid/solax).
 
-## Licence
+## License
 
 MIT

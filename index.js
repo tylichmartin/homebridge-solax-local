@@ -219,13 +219,13 @@ class SolaxPlatform {
 
   makeBatteryAccessory() {
     const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':battery');
-    const accessory = new this.api.platformAccessory('Solax Baterie', uuid);
+    const accessory = new this.api.platformAccessory('Solax Battery', uuid);
     accessory.getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Manufacturer, 'Solax')
       .setCharacteristic(Characteristic.Model, this.model)
       .setCharacteristic(Characteristic.SerialNumber, (this.sn || 'dongle') + ':battery');
 
-    const svc = accessory.addService(Service.Battery, 'Solax Baterie');
+    const svc = accessory.addService(Service.Battery, 'Solax Battery');
     this.accessories.set('battery', {
       accessory,
       update: (soc, batteryPower) => {
@@ -248,12 +248,12 @@ class SolaxPlatform {
 
   setup() {
     const toRegister = [
-      this.makePowerAccessory('pv', 'FVE výroba'),
-      this.makePowerAccessory('load', 'Zátěž domu'),
-      this.makePowerAccessory('gridImport', 'Odběr ze sítě'),
-      this.makePowerAccessory('gridExport', 'Dodávka do sítě'),
-      this.makePowerAccessory('battCharge', 'Baterie nabíjení'),
-      this.makePowerAccessory('battDischarge', 'Baterie vybíjení'),
+      this.makePowerAccessory('pv', 'Solar PV Power'),
+      this.makePowerAccessory('load', 'House Load'),
+      this.makePowerAccessory('gridImport', 'Grid Import'),
+      this.makePowerAccessory('gridExport', 'Grid Export'),
+      this.makePowerAccessory('battCharge', 'Battery Charge'),
+      this.makePowerAccessory('battDischarge', 'Battery Discharge'),
       this.makeBatteryAccessory(),
     ];
     this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, toRegister);
