@@ -1,0 +1,79 @@
+{
+  "pluginAlias": "SolaxLocal",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Local Solax integration. Reads the dongle's local HTTP API (Pocket WiFi 3.0 / LAN) — no cloud, no TokenID.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Solax",
+        "required": true
+      },
+      "model": {
+        "title": "Inverter model",
+        "type": "string",
+        "default": "x3-hybrid-g4",
+        "oneOf": [
+          { "title": "X3 Hybrid G4 / G4 PRO", "enum": ["x3-hybrid-g4"] },
+          { "title": "X1 Hybrid G4", "enum": ["x1-hybrid-g4"] }
+        ],
+        "description": "Selects the Data[] decoder. Add more models in index.js DECODERS."
+      },
+      "host": {
+        "title": "Dongle IP address",
+        "type": "string",
+        "format": "hostname",
+        "placeholder": "192.168.1.50",
+        "required": true,
+        "description": "IP of the Pocket WiFi 3.0 / LAN dongle on your LAN (set a DHCP reservation)."
+      },
+      "sn": {
+        "title": "Dongle serial number (pwd)",
+        "type": "string",
+        "required": true,
+        "description": "The Wi-Fi/LAN dongle registration number printed on its sticker (e.g. SWxxxxxxxx). Used as the API password."
+      },
+      "pollInterval": {
+        "title": "Poll interval (seconds)",
+        "type": "integer",
+        "default": 15,
+        "minimum": 5,
+        "maximum": 300
+      },
+      "timeout": {
+        "title": "Request timeout (seconds)",
+        "type": "integer",
+        "default": 8,
+        "minimum": 2,
+        "maximum": 30
+      },
+      "lowBattery": {
+        "title": "Low battery threshold (%)",
+        "type": "integer",
+        "default": 15,
+        "minimum": 0,
+        "maximum": 100
+      },
+      "invertGrid": {
+        "title": "Invert grid sign",
+        "type": "boolean",
+        "default": false,
+        "description": "Enable if import/export appear swapped."
+      },
+      "invertBattery": {
+        "title": "Invert battery sign",
+        "type": "boolean",
+        "default": false,
+        "description": "Enable if charge/discharge appear swapped."
+      },
+      "debug": {
+        "title": "Debug logging (log raw Data[])",
+        "type": "boolean",
+        "default": false
+      }
+    }
+  }
+}
