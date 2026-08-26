@@ -1,5 +1,10 @@
 # homebridge-solax-local
 
+[![npm version](https://img.shields.io/npm/v/homebridge-solax-local.svg)](https://www.npmjs.com/package/homebridge-solax-local)
+[![npm downloads](https://img.shields.io/npm/dm/homebridge-solax-local.svg)](https://www.npmjs.com/package/homebridge-solax-local)
+[![npm total downloads](https://img.shields.io/npm/dt/homebridge-solax-local.svg)](https://www.npmjs.com/package/homebridge-solax-local)
+[![license](https://img.shields.io/npm/l/homebridge-solax-local.svg)](LICENSE)
+
 Homebridge plugin for **Solax** inverters using the **local dongle API** (Pocket WiFi 3.0 / LAN dongle) — no cloud, no TokenID, no legacy GET. Verified on **X3-Hybrid-G4 / G4 PRO**; the architecture is ready for more models via the `model` config option.
 
 ## How it works
