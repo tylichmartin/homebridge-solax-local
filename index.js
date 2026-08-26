@@ -175,7 +175,9 @@ class SolaxPlatform {
       this.log.warn(`Unknown model "${this.model}", falling back to x3-hybrid-g4 decoder.`);
     }
 
-    this.accessories = new Map(); // key -> { service, updateFn }
+    this.accessories = new Map(); // key -> { accessory, update }
+    this.cached = new Map();      // uuid -> cached PlatformAccessory (restored on restart)
+    this.registered = [];         // uuids we actually use this run
 
     if (!this.host) {
       this.log.error('Missing "host" (dongle IP) in config — plugin will not start.');
@@ -189,25 +191,42 @@ class SolaxPlatform {
     });
   }
 
-  // Homebridge cached accessories (dynamic platform); we build fresh each launch.
-  configureAccessory() {}
+  // Homebridge restores cached accessories here (dynamic platform), before launch.
+  configureAccessory(accessory) {
+    this.cached.set(accessory.UUID, accessory);
+  }
+
+  // Return an accessory for this uuid, reusing the cached one after a restart.
+  getOrCreateAccessory(uuid, displayName) {
+    let accessory = this.cached.get(uuid);
+    const isNew = !accessory;
+    if (isNew) {
+      accessory = new this.api.platformAccessory(displayName, uuid);
+    } else {
+      accessory.displayName = displayName;
+    }
+    this.registered.push(uuid);
+    accessory.getService(Service.AccessoryInformation)
+      .setCharacteristic(Characteristic.Manufacturer, 'Solax')
+      .setCharacteristic(Characteristic.Model, this.model)
+      .setCharacteristic(Characteristic.SerialNumber, (this.sn || 'dongle') + ':' + uuid.slice(-6));
+    return { accessory, isNew };
+  }
 
   // Build one power sensor accessory: native LightSensor (W shown as lux) + Eve Watt.
   makePowerAccessory(key, displayName) {
     const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':' + key);
-    const accessory = new this.api.platformAccessory(displayName, uuid);
-    accessory.getService(Service.AccessoryInformation)
-      .setCharacteristic(Characteristic.Manufacturer, 'Solax')
-      .setCharacteristic(Characteristic.Model, this.model)
-      .setCharacteristic(Characteristic.SerialNumber, (this.sn || 'dongle') + ':' + key);
+    const { accessory, isNew } = this.getOrCreateAccessory(uuid, displayName);
 
-    const svc = accessory.addService(Service.LightSensor, displayName);
+    const svc = accessory.getService(Service.LightSensor)
+      || accessory.addService(Service.LightSensor, displayName);
     svc.getCharacteristic(Characteristic.CurrentAmbientLightLevel)
       .setProps({ minValue: 0.0001, maxValue: 100000 });
-    svc.addCharacteristic(EveWatt);
+    if (!svc.testCharacteristic(EveWatt)) svc.addCharacteristic(EveWatt);
 
     this.accessories.set(key, {
       accessory,
+      isNew,
       update: (watts) => {
         const lux = Math.max(0.0001, Math.abs(watts));
         svc.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, lux);
@@ -219,15 +238,13 @@ class SolaxPlatform {
 
   makeBatteryAccessory() {
     const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':battery');
-    const accessory = new this.api.platformAccessory('Solax Battery', uuid);
-    accessory.getService(Service.AccessoryInformation)
-      .setCharacteristic(Characteristic.Manufacturer, 'Solax')
-      .setCharacteristic(Characteristic.Model, this.model)
-      .setCharacteristic(Characteristic.SerialNumber, (this.sn || 'dongle') + ':battery');
+    const { accessory, isNew } = this.getOrCreateAccessory(uuid, 'Solax Battery');
 
-    const svc = accessory.addService(Service.Battery, 'Solax Battery');
+    const svc = accessory.getService(Service.Battery)
+      || accessory.addService(Service.Battery, 'Solax Battery');
     this.accessories.set('battery', {
       accessory,
+      isNew,
       update: (soc, batteryPower) => {
         svc.updateCharacteristic(Characteristic.BatteryLevel, Math.max(0, Math.min(100, soc)));
         svc.updateCharacteristic(
@@ -247,17 +264,36 @@ class SolaxPlatform {
   }
 
   setup() {
-    const toRegister = [
-      this.makePowerAccessory('pv', 'Solar PV Power'),
-      this.makePowerAccessory('load', 'House Load'),
-      this.makePowerAccessory('gridImport', 'Grid Import'),
-      this.makePowerAccessory('gridExport', 'Grid Export'),
-      this.makePowerAccessory('battCharge', 'Battery Charge'),
-      this.makePowerAccessory('battDischarge', 'Battery Discharge'),
-      this.makeBatteryAccessory(),
-    ];
-    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, toRegister);
-    this.log.info(`Registered ${toRegister.length} Solax accessories (host ${this.host}).`);
+    this.makePowerAccessory('pv', 'Solar PV Power');
+    this.makePowerAccessory('load', 'House Load');
+    this.makePowerAccessory('gridImport', 'Grid Import');
+    this.makePowerAccessory('gridExport', 'Grid Export');
+    this.makePowerAccessory('battCharge', 'Battery Charge');
+    this.makePowerAccessory('battDischarge', 'Battery Discharge');
+    this.makeBatteryAccessory();
+
+    // Register only accessories new this run; reused cached ones are already live.
+    const toRegister = [];
+    for (const { accessory, isNew } of this.accessories.values()) {
+      if (isNew) toRegister.push(accessory);
+    }
+    if (toRegister.length) {
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, toRegister);
+    }
+
+    // Remove stale cached accessories no longer produced by this config.
+    const stale = [];
+    for (const [uuid, accessory] of this.cached) {
+      if (!this.registered.includes(uuid)) stale.push(accessory);
+    }
+    if (stale.length) {
+      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, stale);
+    }
+
+    this.log.info(
+      `Solax ready (host ${this.host}): ${toRegister.length} new, ` +
+      `${this.accessories.size - toRegister.length} reused, ${stale.length} removed.`
+    );
   }
 
   async poll() {
