@@ -77,7 +77,8 @@ function decodeX3HybridG4(data) {
 
   const pv1 = d(14);
   const pv2 = d(15);
-  const pvPower = pv1 + pv2;
+  const pv3 = d(131); // 3rd MPPT (X3-Hybrid-G4 PRO); 0 on 2-MPPT models
+  const pvPower = pv1 + pv2 + pv3;
 
   // Grid (feed-in) power: + = export to grid, - = import from grid
   const gridPower = packU32(d(34), d(35));
@@ -101,6 +102,7 @@ function decodeX3HybridG4(data) {
     pvPower,
     pv1,
     pv2,
+    pv3,
     gridPower,
     batteryPower,
     loadPower,
