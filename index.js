@@ -95,6 +95,8 @@ function decodeX3HybridG4(data) {
   const yieldToday = d(70) / 10;               // kWh
   const yieldTotal = packU32(d(68), d(69)) / 10; // kWh
 
+  const runMode = d(19); // 3 = Fault, 4 = Permanent Fault
+
   return {
     pvPower,
     pv1,
@@ -107,8 +109,12 @@ function decodeX3HybridG4(data) {
     radTemp,
     yieldToday,
     yieldTotal,
+    runMode,
   };
 }
+
+// X3 Hybrid G4 run modes; 3/4 are fault states.
+const FAULT_MODES = new Set([3, 4]);
 
 // ----------------------------------------------------------------------------
 // Local dongle query
@@ -181,6 +187,7 @@ class SolaxPlatform {
     this.built = [];              // [{ accessory, isNew }] all accessories built this run
     this.triggers = Array.isArray(config.triggers) ? config.triggers : [];
     this.triggerEvals = [];       // [{ cfg, update(values) }]
+    this.hidden = new Set(Array.isArray(config.hide) ? config.hide : []);
 
     if (!this.host) {
       this.log.error('Missing "host" (dongle IP) in config — plugin will not start.');
@@ -275,6 +282,56 @@ class SolaxPlatform {
     return accessory;
   }
 
+  // Temperature sensor (shown natively in °C by Apple Home).
+  makeTemperatureAccessory(key, displayName) {
+    const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':' + key);
+    const { accessory } = this.getOrCreateAccessory(uuid, displayName);
+    const svc = accessory.getService(Service.TemperatureSensor)
+      || accessory.addService(Service.TemperatureSensor, displayName);
+    svc.getCharacteristic(Characteristic.CurrentTemperature).setProps({ minValue: -50, maxValue: 150 });
+    this.accessories.set(key, {
+      accessory,
+      update: (celsius) => svc.updateCharacteristic(Characteristic.CurrentTemperature, celsius),
+    });
+    return accessory;
+  }
+
+  // Online sensor: a ContactSensor that "opens" when the dongle stops responding.
+  makeOnlineAccessory() {
+    const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':online');
+    const { accessory } = this.getOrCreateAccessory(uuid, 'Solax Online');
+    const svc = accessory.getService(Service.ContactSensor)
+      || accessory.addService(Service.ContactSensor, 'Solax Online');
+    this.accessories.set('online', {
+      accessory,
+      update: (online) => svc.updateCharacteristic(
+        Characteristic.ContactSensorState,
+        online
+          ? Characteristic.ContactSensorState.CONTACT_DETECTED       // closed = online/OK
+          : Characteristic.ContactSensorState.CONTACT_NOT_DETECTED   // open = offline (alert)
+      ),
+    });
+    return accessory;
+  }
+
+  // Fault sensor: an OccupancySensor that "detects" when the inverter reports a fault.
+  makeFaultAccessory() {
+    const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':fault');
+    const { accessory } = this.getOrCreateAccessory(uuid, 'Solax Fault');
+    const svc = accessory.getService(Service.OccupancySensor)
+      || accessory.addService(Service.OccupancySensor, 'Solax Fault');
+    this.accessories.set('fault', {
+      accessory,
+      update: (fault) => svc.updateCharacteristic(
+        Characteristic.OccupancyDetected,
+        fault
+          ? Characteristic.OccupancyDetected.OCCUPANCY_DETECTED
+          : Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED
+      ),
+    });
+    return accessory;
+  }
+
   // Build a threshold accessory: an OccupancySensor that turns "detected" when a
   // metric crosses a configured limit. HomeKit automations can then react to it.
   makeTriggerAccessory(cfg, idx) {
@@ -319,13 +376,18 @@ class SolaxPlatform {
   }
 
   setup() {
-    this.makePowerAccessory('pv', 'Solar PV Power');
-    this.makePowerAccessory('load', 'House Load');
-    this.makePowerAccessory('gridImport', 'Grid Import');
-    this.makePowerAccessory('gridExport', 'Grid Export');
-    this.makePowerAccessory('battCharge', 'Battery Charge');
-    this.makePowerAccessory('battDischarge', 'Battery Discharge');
-    this.makeBatteryAccessory();
+    const show = (key) => !this.hidden.has(key);
+    if (show('pv')) this.makePowerAccessory('pv', 'Solar PV Power');
+    if (show('load')) this.makePowerAccessory('load', 'House Load');
+    if (show('gridImport')) this.makePowerAccessory('gridImport', 'Grid Import');
+    if (show('gridExport')) this.makePowerAccessory('gridExport', 'Grid Export');
+    if (show('battCharge')) this.makePowerAccessory('battCharge', 'Battery Charge');
+    if (show('battDischarge')) this.makePowerAccessory('battDischarge', 'Battery Discharge');
+    if (show('battery')) this.makeBatteryAccessory();
+    if (show('tempInverter')) this.makeTemperatureAccessory('tempInverter', 'Solax Inverter Temp');
+    if (show('tempBattery')) this.makeTemperatureAccessory('tempBattery', 'Solax Battery Temp');
+    if (show('online')) this.makeOnlineAccessory();
+    if (show('fault')) this.makeFaultAccessory();
     this.triggers.forEach((cfg, i) => this.makeTriggerAccessory(cfg, i));
 
     // Register only accessories new this run; reused cached ones are already live.
@@ -374,24 +436,36 @@ class SolaxPlatform {
         soc: m.soc,
       };
 
-      this.accessories.get('pv').update(values.pv);
-      this.accessories.get('load').update(values.load);
-      this.accessories.get('gridImport').update(values.gridImport);
-      this.accessories.get('gridExport').update(values.gridExport);
-      this.accessories.get('battCharge').update(values.battCharge);
-      this.accessories.get('battDischarge').update(values.battDischarge);
-      this.accessories.get('battery').update(m.soc, batteryPower);
+      this.upd('pv', values.pv);
+      this.upd('load', values.load);
+      this.upd('gridImport', values.gridImport);
+      this.upd('gridExport', values.gridExport);
+      this.upd('battCharge', values.battCharge);
+      this.upd('battDischarge', values.battDischarge);
+      this.upd('battery', m.soc, batteryPower);
+      this.upd('tempInverter', m.radTemp);
+      this.upd('tempBattery', m.battTemp);
+      this.upd('online', true);
+      this.upd('fault', FAULT_MODES.has(m.runMode));
 
       for (const t of this.triggerEvals) t.update(values);
 
       if (this.debug) {
         this.log.info(
           `PV=${m.pvPower}W Load=${m.loadPower}W Grid=${gridPower}W ` +
-          `Batt=${batteryPower}W SOC=${m.soc}% Today=${m.yieldToday}kWh`
+          `Batt=${batteryPower}W SOC=${m.soc}% Today=${m.yieldToday}kWh ` +
+          `InvT=${m.radTemp}C BatT=${m.battTemp}C Mode=${m.runMode}`
         );
       }
     } catch (e) {
       this.log.warn('Solax poll failed: ' + e.message);
+      this.upd('online', false); // mark offline so a HomeKit automation can alert
     }
+  }
+
+  // Update an accessory only if it exists (it may be hidden via config.hide).
+  upd(key, ...args) {
+    const a = this.accessories.get(key);
+    if (a) a.update(...args);
   }
 }

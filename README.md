@@ -76,8 +76,26 @@ Apple Home has no native "power in W" characteristic, so power values are expose
 | Battery Charge | Battery (41), positive part | |
 | Battery Discharge | Battery (41), negative part | |
 | Solax Battery | SOC (103) | native battery %, charging state |
+| Solax Inverter Temp | radiator (54) | °C, shown natively |
+| Solax Battery Temp | battery (105) | °C, shown natively |
+| Solax Online | poll success | ContactSensor: opens when the dongle stops responding |
+| Solax Fault | run mode (19) | OccupancySensor: detects when the inverter reports a fault |
 
 Signs swapped? Toggle `invertGrid` / `invertBattery`.
+
+### Hiding accessories
+
+Don't want all the tiles? List the ones to hide by their key:
+
+```json
+"hide": ["gridImport", "gridExport", "battCharge", "battDischarge", "tempBattery"]
+```
+
+Keys: `pv`, `load`, `gridImport`, `gridExport`, `battCharge`, `battDischarge`, `battery`, `tempInverter`, `tempBattery`, `online`, `fault`.
+
+### Online / fault alerts
+
+`Solax Online` opens (contact "not detected") when the dongle stops answering, and `Solax Fault` activates when the inverter reports a fault state. Use either in a HomeKit automation to get a notification.
 
 ## Automation triggers
 

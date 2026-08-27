@@ -74,6 +74,16 @@
         "type": "boolean",
         "default": false
       },
+      "hide": {
+        "title": "Hide accessories",
+        "type": "array",
+        "description": "Accessories you do NOT want exposed to HomeKit.",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "enum": ["pv", "load", "gridImport", "gridExport", "battCharge", "battDischarge", "battery", "tempInverter", "tempBattery", "online", "fault"]
+        }
+      },
       "triggers": {
         "title": "Automation triggers",
         "type": "array",
