@@ -178,6 +178,9 @@ class SolaxPlatform {
     this.accessories = new Map(); // key -> { accessory, update }
     this.cached = new Map();      // uuid -> cached PlatformAccessory (restored on restart)
     this.registered = [];         // uuids we actually use this run
+    this.built = [];              // [{ accessory, isNew }] all accessories built this run
+    this.triggers = Array.isArray(config.triggers) ? config.triggers : [];
+    this.triggerEvals = [];       // [{ cfg, update(values) }]
 
     if (!this.host) {
       this.log.error('Missing "host" (dongle IP) in config — plugin will not start.');
@@ -210,6 +213,7 @@ class SolaxPlatform {
       .setCharacteristic(Characteristic.Manufacturer, 'Solax')
       .setCharacteristic(Characteristic.Model, this.model)
       .setCharacteristic(Characteristic.SerialNumber, (this.sn || 'dongle') + ':' + uuid.slice(-6));
+    this.built.push({ accessory, isNew });
     return { accessory, isNew };
   }
 
@@ -271,6 +275,49 @@ class SolaxPlatform {
     return accessory;
   }
 
+  // Build a threshold accessory: an OccupancySensor that turns "detected" when a
+  // metric crosses a configured limit. HomeKit automations can then react to it.
+  makeTriggerAccessory(cfg, idx) {
+    const name = cfg.name || `Trigger ${idx + 1}`;
+    const metric = cfg.metric;
+    const above = typeof cfg.above === 'number' ? cfg.above : undefined;
+    const below = typeof cfg.below === 'number' ? cfg.below : undefined;
+    const hyst = typeof cfg.hysteresis === 'number' ? Math.abs(cfg.hysteresis) : 0;
+
+    if (!metric || (above === undefined && below === undefined)) {
+      this.log.warn(`Ignoring trigger "${name}": needs "metric" and "above" or "below".`);
+      return;
+    }
+
+    const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':trigger:' + name);
+    const { accessory } = this.getOrCreateAccessory(uuid, name);
+    const svc = accessory.getService(Service.OccupancySensor)
+      || accessory.addService(Service.OccupancySensor, name);
+
+    let active = false; // hysteresis state
+    this.triggerEvals.push({
+      cfg,
+      update: (values) => {
+        const v = values[metric];
+        if (typeof v !== 'number') return;
+        if (!active) {
+          if (above !== undefined && v >= above) active = true;
+          else if (below !== undefined && v <= below) active = true;
+        } else {
+          if (above !== undefined && v < above - hyst) active = false;
+          else if (below !== undefined && v > below + hyst) active = false;
+        }
+        svc.updateCharacteristic(
+          Characteristic.OccupancyDetected,
+          active
+            ? Characteristic.OccupancyDetected.OCCUPANCY_DETECTED
+            : Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED
+        );
+      },
+    });
+    return accessory;
+  }
+
   setup() {
     this.makePowerAccessory('pv', 'Solar PV Power');
     this.makePowerAccessory('load', 'House Load');
@@ -279,10 +326,11 @@ class SolaxPlatform {
     this.makePowerAccessory('battCharge', 'Battery Charge');
     this.makePowerAccessory('battDischarge', 'Battery Discharge');
     this.makeBatteryAccessory();
+    this.triggers.forEach((cfg, i) => this.makeTriggerAccessory(cfg, i));
 
     // Register only accessories new this run; reused cached ones are already live.
     const toRegister = [];
-    for (const { accessory, isNew } of this.accessories.values()) {
+    for (const { accessory, isNew } of this.built) {
       if (isNew) toRegister.push(accessory);
     }
     if (toRegister.length) {
@@ -300,7 +348,8 @@ class SolaxPlatform {
 
     this.log.info(
       `Solax ready (host ${this.host}): ${toRegister.length} new, ` +
-      `${this.accessories.size - toRegister.length} reused, ${stale.length} removed.`
+      `${this.built.length - toRegister.length} reused, ${stale.length} removed, ` +
+      `${this.triggerEvals.length} triggers.`
     );
   }
 
@@ -315,13 +364,25 @@ class SolaxPlatform {
       if (this.invertGrid) gridPower = -gridPower;
       if (this.invertBattery) batteryPower = -batteryPower;
 
-      this.accessories.get('pv').update(m.pvPower);
-      this.accessories.get('load').update(m.loadPower);
-      this.accessories.get('gridImport').update(Math.max(0, -gridPower));
-      this.accessories.get('gridExport').update(Math.max(0, gridPower));
-      this.accessories.get('battCharge').update(Math.max(0, batteryPower));
-      this.accessories.get('battDischarge').update(Math.max(0, -batteryPower));
+      const values = {
+        pv: m.pvPower,
+        load: m.loadPower,
+        gridImport: Math.max(0, -gridPower),
+        gridExport: Math.max(0, gridPower),
+        battCharge: Math.max(0, batteryPower),
+        battDischarge: Math.max(0, -batteryPower),
+        soc: m.soc,
+      };
+
+      this.accessories.get('pv').update(values.pv);
+      this.accessories.get('load').update(values.load);
+      this.accessories.get('gridImport').update(values.gridImport);
+      this.accessories.get('gridExport').update(values.gridExport);
+      this.accessories.get('battCharge').update(values.battCharge);
+      this.accessories.get('battDischarge').update(values.battDischarge);
       this.accessories.get('battery').update(m.soc, batteryPower);
+
+      for (const t of this.triggerEvals) t.update(values);
 
       if (this.debug) {
         this.log.info(

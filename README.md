@@ -79,6 +79,27 @@ Apple Home has no native "power in W" characteristic, so power values are expose
 
 Signs swapped? Toggle `invertGrid` / `invertBattery`.
 
+## Automation triggers
+
+Apple Home cannot run automations off a numeric sensor value, so the plugin can
+expose **threshold occupancy sensors**: each one activates when a metric crosses
+a limit, and HomeKit automations can react to it ("When X detects → turn on …").
+
+```json
+"triggers": [
+  { "name": "Solar surplus", "metric": "pv", "above": 2000, "hysteresis": 200 },
+  { "name": "Battery full", "metric": "soc", "above": 90 },
+  { "name": "Battery low", "metric": "soc", "below": 15 },
+  { "name": "Exporting to grid", "metric": "gridExport", "above": 500 }
+]
+```
+
+- `metric`: one of `pv`, `load`, `gridImport`, `gridExport`, `battCharge`, `battDischarge`, `soc`
+- `above` / `below`: the limit (use one or both)
+- `hysteresis` (optional): margin before it switches back, to avoid flapping around the limit
+
+In the Home app create an automation: **When "Solar surplus" detects occupancy → turn on** your boiler / EV charger / anything. When it stops detecting, run the "off" automation.
+
 ## Adding another model
 
 `index.js` has a `DECODERS` map. Add a `decodeXxx(data)` function that returns the same fields (`pvPower`, `gridPower`, `batteryPower`, `loadPower`, `soc`, `yieldToday`, `yieldTotal`, …) and register it in `DECODERS` under the model key. The rest of the plugin is generic.

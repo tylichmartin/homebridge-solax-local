@@ -73,6 +73,50 @@
         "title": "Debug logging (log raw Data[])",
         "type": "boolean",
         "default": false
+      },
+      "triggers": {
+        "title": "Automation triggers",
+        "type": "array",
+        "description": "Each trigger is an occupancy sensor that activates when a metric crosses a limit. Use it in HomeKit automations.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": true,
+              "placeholder": "e.g. Solar surplus"
+            },
+            "metric": {
+              "title": "Metric",
+              "type": "string",
+              "required": true,
+              "default": "pv",
+              "oneOf": [
+                { "title": "Solar PV power (W)", "enum": ["pv"] },
+                { "title": "House load (W)", "enum": ["load"] },
+                { "title": "Grid import (W)", "enum": ["gridImport"] },
+                { "title": "Grid export (W)", "enum": ["gridExport"] },
+                { "title": "Battery charge (W)", "enum": ["battCharge"] },
+                { "title": "Battery discharge (W)", "enum": ["battDischarge"] },
+                { "title": "Battery SOC (%)", "enum": ["soc"] }
+              ]
+            },
+            "above": {
+              "title": "Activate when value is at or above",
+              "type": "number"
+            },
+            "below": {
+              "title": "Activate when value is at or below",
+              "type": "number"
+            },
+            "hysteresis": {
+              "title": "Hysteresis (avoids flapping near the limit)",
+              "type": "number",
+              "default": 0
+            }
+          }
+        }
       }
     }
   }
