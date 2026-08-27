@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # needed to create tags and GitHub Releases
+      id-token: write   # needed for npm provenance attestation
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,7 +41,7 @@ jobs:
           if npm view "homebridge-solax-local@${{ steps.v.outputs.version }}" version >/dev/null 2>&1; then
             echo "Version ${{ steps.v.outputs.version }} already on npm — skipping publish."
           else
-            npm publish --access public
+            npm publish --provenance --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
