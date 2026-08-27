@@ -253,20 +253,27 @@ class SolaxPlatform {
     const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':battery');
     const { accessory, isNew } = this.getOrCreateAccessory(uuid, 'Solax Battery');
 
-    // Apple Home cannot display a standalone Battery service ("Not Supported"),
-    // so SOC is exposed as a HumiditySensor (shows the % natively). The Battery
-    // service is kept as a supporting service for the charging state / Eve.
-    const humidity = accessory.getService(Service.HumiditySensor)
-      || accessory.addService(Service.HumiditySensor, 'Solax Battery');
+    // batteryStyle:
+    //   "battery"  (default) - standalone Battery service. Apple Home shows it as a
+    //              main-screen tile ("Not Supported" on the face, but SOC % when opened).
+    //   "humidity" - a HumiditySensor so the % shows in the Climate group instead.
+    const style = (this.config.batteryStyle || 'battery').toLowerCase();
     const battery = accessory.getService(Service.Battery)
-      || accessory.addService(Service.Battery, 'Battery');
+      || accessory.addService(Service.Battery, 'Solax Battery');
+    let humidity = accessory.getService(Service.HumiditySensor);
+    if (style === 'humidity') {
+      if (!humidity) humidity = accessory.addService(Service.HumiditySensor, 'Solax Battery');
+    } else if (humidity) {
+      accessory.removeService(humidity); // migrate away from the humidity style
+      humidity = null;
+    }
 
     this.accessories.set('battery', {
       accessory,
       isNew,
       update: (soc, batteryPower) => {
         const level = Math.max(0, Math.min(100, soc));
-        humidity.updateCharacteristic(Characteristic.CurrentRelativeHumidity, level);
+        if (humidity) humidity.updateCharacteristic(Characteristic.CurrentRelativeHumidity, level);
         battery.updateCharacteristic(Characteristic.BatteryLevel, level);
         battery.updateCharacteristic(
           Characteristic.StatusLowBattery,

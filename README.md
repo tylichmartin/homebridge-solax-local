@@ -75,7 +75,7 @@ Apple Home has no native "power in W" characteristic, so power values are expose
 | Grid Export | Grid (34-35), positive part | export to grid |
 | Battery Charge | Battery (41), positive part | |
 | Battery Discharge | Battery (41), negative part | |
-| Solax Battery | SOC (103) | native battery %, charging state |
+| Solax Battery | SOC (103) | main-screen tile, % + charging state (see `batteryStyle`) |
 | Solax Inverter Temp | radiator (54) | °C, shown natively |
 | Solax Battery Temp | battery (105) | °C, shown natively |
 | Solax Online | poll success | ContactSensor: opens when the dongle stops responding |

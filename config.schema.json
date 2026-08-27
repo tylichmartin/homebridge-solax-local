@@ -57,6 +57,15 @@
         "minimum": 0,
         "maximum": 100
       },
+      "batteryStyle": {
+        "title": "Battery display",
+        "type": "string",
+        "default": "battery",
+        "oneOf": [
+          { "title": "Battery tile (main screen, % when opened)", "enum": ["battery"] },
+          { "title": "Humidity sensor (shows % in the Climate group)", "enum": ["humidity"] }
+        ]
+      },
       "invertGrid": {
         "title": "Invert grid sign",
         "type": "boolean",
