@@ -46,8 +46,25 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Build release notes from commits
+        id: notes
+        run: |
+          PREV=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
+          {
+            echo "body<<CHANGELOG_EOF"
+            echo "### Changes"
+            git log $RANGE --no-merges --pretty=format:'- %s'
+            echo ""
+            if [ -n "$PREV" ]; then
+              echo ""
+              echo "**Full changelog:** https://github.com/tylichmartin/homebridge-solax-local/compare/$PREV...v${{ steps.v.outputs.version }}"
+            fi
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         if: steps.tag.outputs.exists == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "v${{ steps.v.outputs.version }}" --title "v${{ steps.v.outputs.version }}" --notes "Automated release v${{ steps.v.outputs.version }}" --target main
+        run: gh release create "v${{ steps.v.outputs.version }}" --title "v${{ steps.v.outputs.version }}" --notes "${{ steps.notes.outputs.body }}" --target main
