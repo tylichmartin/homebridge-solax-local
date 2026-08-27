@@ -240,21 +240,29 @@ class SolaxPlatform {
     const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':battery');
     const { accessory, isNew } = this.getOrCreateAccessory(uuid, 'Solax Battery');
 
-    const svc = accessory.getService(Service.Battery)
-      || accessory.addService(Service.Battery, 'Solax Battery');
+    // Apple Home cannot display a standalone Battery service ("Not Supported"),
+    // so SOC is exposed as a HumiditySensor (shows the % natively). The Battery
+    // service is kept as a supporting service for the charging state / Eve.
+    const humidity = accessory.getService(Service.HumiditySensor)
+      || accessory.addService(Service.HumiditySensor, 'Solax Battery');
+    const battery = accessory.getService(Service.Battery)
+      || accessory.addService(Service.Battery, 'Battery');
+
     this.accessories.set('battery', {
       accessory,
       isNew,
       update: (soc, batteryPower) => {
-        svc.updateCharacteristic(Characteristic.BatteryLevel, Math.max(0, Math.min(100, soc)));
-        svc.updateCharacteristic(
+        const level = Math.max(0, Math.min(100, soc));
+        humidity.updateCharacteristic(Characteristic.CurrentRelativeHumidity, level);
+        battery.updateCharacteristic(Characteristic.BatteryLevel, level);
+        battery.updateCharacteristic(
           Characteristic.StatusLowBattery,
           soc <= (this.config.lowBattery || 15)
             ? Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW
             : Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL
         );
         const charging = this.invertBattery ? batteryPower < -10 : batteryPower > 10;
-        svc.updateCharacteristic(
+        battery.updateCharacteristic(
           Characteristic.ChargingState,
           charging ? Characteristic.ChargingState.CHARGING : Characteristic.ChargingState.NOT_CHARGING
         );
