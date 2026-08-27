@@ -291,6 +291,22 @@ class SolaxPlatform {
     return accessory;
   }
 
+  // Separate HumiditySensor exposing battery SOC as % (for "both" style) — usable
+  // as a sensor / in automations, alongside the standalone Battery tile.
+  makeSocHumidityAccessory() {
+    const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':batterysoc');
+    const { accessory } = this.getOrCreateAccessory(uuid, 'Solax Battery SOC');
+    const svc = accessory.getService(Service.HumiditySensor)
+      || accessory.addService(Service.HumiditySensor, 'Solax Battery SOC');
+    this.accessories.set('batterySoc', {
+      accessory,
+      update: (soc) => svc.updateCharacteristic(
+        Characteristic.CurrentRelativeHumidity, Math.max(0, Math.min(100, soc))
+      ),
+    });
+    return accessory;
+  }
+
   // Temperature sensor (shown natively in °C by Apple Home).
   makeTemperatureAccessory(key, displayName) {
     const uuid = this.api.hap.uuid.generate(PLUGIN_NAME + ':' + this.host + ':' + key);
@@ -393,6 +409,9 @@ class SolaxPlatform {
     if (show('battCharge')) this.makePowerAccessory('battCharge', 'Battery Charge');
     if (show('battDischarge')) this.makePowerAccessory('battDischarge', 'Battery Discharge');
     if (show('battery')) this.makeBatteryAccessory();
+    if (show('battery') && (this.config.batteryStyle || 'battery').toLowerCase() === 'both') {
+      this.makeSocHumidityAccessory();
+    }
     if (show('tempInverter')) this.makeTemperatureAccessory('tempInverter', 'Solax Inverter Temp');
     if (show('tempBattery')) this.makeTemperatureAccessory('tempBattery', 'Solax Battery Temp');
     if (show('online')) this.makeOnlineAccessory();
@@ -452,6 +471,7 @@ class SolaxPlatform {
       this.upd('battCharge', values.battCharge);
       this.upd('battDischarge', values.battDischarge);
       this.upd('battery', m.soc, batteryPower);
+      this.upd('batterySoc', m.soc);
       this.upd('tempInverter', m.radTemp);
       this.upd('tempBattery', m.battTemp);
       this.upd('online', true);

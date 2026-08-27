@@ -63,7 +63,8 @@
         "default": "battery",
         "oneOf": [
           { "title": "Battery tile (main screen, % when opened)", "enum": ["battery"] },
-          { "title": "Humidity sensor (shows % in the Climate group)", "enum": ["humidity"] }
+          { "title": "Humidity sensor (shows % in the Climate group)", "enum": ["humidity"] },
+          { "title": "Both (battery tile + separate SOC % sensor for automations)", "enum": ["both"] }
         ]
       },
       "invertGrid": {
