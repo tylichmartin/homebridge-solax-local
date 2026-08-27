@@ -51,11 +51,13 @@ jobs:
         run: |
           PREV=$(git describe --tags --abbrev=0 2>/dev/null || true)
           if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
+          # Only list commits that touched the plugin itself (skip CI/meta commits).
+          LOG=$(git log $RANGE --no-merges --pretty=format:'- %s' -- index.js config.schema.json probe.js)
+          [ -z "$LOG" ] && LOG="- Maintenance release (no plugin code changes)"
           {
             echo "body<<CHANGELOG_EOF"
             echo "### Changes"
-            git log $RANGE --no-merges --pretty=format:'- %s'
-            echo ""
+            echo "$LOG"
             if [ -n "$PREV" ]; then
               echo ""
               echo "**Full changelog:** https://github.com/tylichmartin/homebridge-solax-local/compare/$PREV...v${{ steps.v.outputs.version }}"
