@@ -1,10 +1,13 @@
 {
   "name": "homebridge-solax-local",
   "displayName": "Homebridge Solax Local",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Homebridge plugin for Solax inverters via the local dongle API (Pocket WiFi 3.0 / LAN). No cloud, no TokenID. X3-Hybrid-G4 supported, extensible to other models.",
   "license": "MIT",
   "author": "Martin Tylich",
+  "contributors": [
+    "Claude (Anthropic) <noreply@anthropic.com>"
+  ],
   "main": "index.js",
   "engines": {
     "node": ">=18.0.0",
